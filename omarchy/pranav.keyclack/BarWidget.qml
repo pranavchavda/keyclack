@@ -19,6 +19,8 @@ BarWidget {
   id: root
   moduleName: "pranav.keyclack"
 
+  // EDIT THIS for your machine: the absolute path to your installed keyclack
+  // console script (Quickshell's Process does no PATH lookup on bare argv[0]).
   readonly property string exe: "/home/pranav/.local/bin/keyclack"
 
   property string status: "unknown"   // on | muted | off | unknown
