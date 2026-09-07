@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "pranav.keyclack",
+  "name": "Keyclack",
+  "version": "1.0.0",
+  "author": "Pranav Chavda",
+  "license": "MIT",
+  "description": "Mute/unmute keyclack keyboard-sound daemon from the bar",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Keyclack",
+    "description": "Toggle keyclack's mechanical keyboard sounds (click to mute/unmute; starts the daemon if it is stopped).",
+    "category": "Sound",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

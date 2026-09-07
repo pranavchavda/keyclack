@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# keyclack launcher — runs the app from the venv in its project directory.
+# Safe to symlink onto PATH (e.g. ~/.local/bin/keyclack). Works from any
+# working directory (systemd/autostart/bar launches have a different cwd than
+# an interactive shell), so we cd into the project before invoking `python -m`.
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+PROJ="$(dirname "$(dirname "$SELF")")"
+cd "$PROJ" || exit 1
+exec "$PROJ/.venv/bin/python" -m keyclack "$@"

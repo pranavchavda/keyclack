@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "keyclack"
+version = "0.1.0"
+description = "Mechanical keyboard sound effects on every key press for Linux/Wayland — a Klack-style daemon."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Pranav Chavda" }]
+requires-python = ">=3.10"
+keywords = ["keyboard", "mechanical", "sound", "klack", "wayland", "hyprland", "evdev", "pipewire"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+dependencies = [
+    "evdev>=1.6",
+    "sounddevice>=0.4.4",
+    "soundfile>=0.12",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+keyclack = "keyclack.main:main"
+
+[tool.setuptools]
+packages = ["keyclack"]
+
+[tool.setuptools.package-data]
+keyclack = ["packs/*/manifest.json", "packs/*/*.wav"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
