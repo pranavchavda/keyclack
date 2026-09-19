@@ -53,7 +53,7 @@ the app works immediately after `pip install .` even before you run `install-pac
 | `keyclack soundcheck` | play each sample of the active pack once (audio check) |
 | `keyclack test` | end-to-end test (virtual typing -> capture -> audio) |
 | `keyclack toggle` | mute/unmute a running daemon (SIGUSR1) |
-| `keyclack state` | machine-readable state: `running enabled pack=<id> (pid N)` |
+| `keyclack state` | machine-readable state: `running enabled pack=<id> volume=0.9 (pid N)` |
 | `keyclack status` | is the daemon running? |
 | `keyclack set volume=0.6` | change settings (also `pack=...`, `enabled=...`, `devices=...`) |
 
@@ -62,8 +62,10 @@ the app works immediately after `pip install .` even before you run `install-pac
 Hyprland — add to `~/.config/hypr/autostart.lua`:
 
 ```lua
-o.launch_on_start("keyclack")
+o.launch_on_start("keyclack run")
 ```
+
+> The `run` subcommand is required — a bare `keyclack` only prints usage.
 
 Other compositors — add `keyclack run` to your normal session-autostart mechanism.
 
@@ -97,13 +99,51 @@ Only the *press* (evdev value 1) is sounded, so holding a key down doesn't machi
 Generic keys alternate between the pack's `key`/`key2` samples so typing has texture rather
 than one identical click looping.
 
-## Omarchy bar control
+## Omarchy plugin (bar widget + settings panel)
 
-An optional [Omarchy](https://omarchy.org/) shell plugin (`pranav.keyclack`) shows the daemon's
-live state as a keyboard glyph in the top bar: **left click** mutes/unmutes, **right click**
-cycles the sound pack, the tooltip shows state + active pack. See `omarchy/pranav.keyclack/` in
-this repo; enable it by copying the folder into `~/.config/omarchy/plugins/` and running
-`omarchy plugin enable pranav.keyclack`.
+This repository is also an [Omarchy](https://omarchy.org/) shell plugin
+(`pranav.keyclack`). A keyboard glyph in the top bar shows the daemon's live
+state: **left click** opens a settings panel (volume slider, sound-pack
+picker, mute), **right click** mutes/unmutes, **middle click** cycles the
+sound pack.
+
+### Install (Omarchy)
+
+1. Install the daemon and make sure `keyclack` is on your `PATH`:
+   ```bash
+   sudo pacman -S --needed portaudio      # system audio lib for sounddevice
+   uv tool install git+https://github.com/pranavchavda/keyclack.git
+   # or: pipx install git+https://github.com/pranavchavda/keyclack.git
+   ```
+2. Add your user to the `input` group (see Prerequisites above), then install
+   the plugin:
+   ```bash
+   omarchy plugin add https://github.com/pranavchavda/keyclack.git --enable
+   ```
+3. Autostart the daemon (see above), or just click the bar icon and press
+   **Start**.
+
+The widget resolves the `keyclack` CLI from your `PATH` at runtime, so any
+install method works.
+
+### Remove (Omarchy)
+
+```bash
+omarchy plugin remove pranav.keyclack
+uv tool uninstall keyclack        # or pipx uninstall keyclack
+# remove the o.launch_on_start("keyclack run") line from ~/.config/hypr/autostart.lua
+rm -rf ~/.config/keyclack ~/.local/share/keyclack    # settings + sample packs
+```
+
+### Dependencies
+
+- **Python** ≥ 3.10 — declared in `pyproject.toml`: `evdev`, `sounddevice`,
+  `soundfile`, `numpy` (installed automatically by pipx / uv).
+- **System**: `portaudio` (PipeWire/PulseAudio setups provide the server).
+  Optional: writable `/dev/uinput` for `keyclack test` (comes with the
+  `input` group).
+- **License**: MIT — this repo and the bundled sample packs (see
+  [THIRD_PARTY.md](THIRD_PARTY.md)).
 
 ## License
 

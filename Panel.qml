@@ -56,10 +56,9 @@ Panel {
   readonly property color foreground: bar ? bar.barForeground : Color.foreground
   readonly property color dim: Qt.darker(foreground, 1.45)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
-  // Same per-machine absolute path as the bar widget (no PATH lookup in
-  // Quickshell's Process); hostWidget supplies it once injected.
-  readonly property string exe: hostWidget && hostWidget.exe
-      ? hostWidget.exe : "/home/pranav/.local/bin/keyclack"
+  // The bar widget resolves the CLI path from PATH; empty until then, and
+  // every action here guards on it.
+  readonly property string exe: hostWidget && hostWidget.exe ? hostWidget.exe : ""
 
   onHostWidgetChanged: {
     if (hostWidget) {
@@ -76,7 +75,7 @@ Panel {
   }
 
   function reloadPacks() {
-    if (!packsProc.running) packsProc.running = true
+    if (root.exe && !packsProc.running) packsProc.running = true
   }
 
   function run(cmd) {

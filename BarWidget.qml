@@ -12,15 +12,16 @@ import qs.Ui
 //
 // Polls `keyclack state`, which prints e.g.
 //   running enabled pack=cherry-mx-red volume=0.9 (pid N)
-// Quickshell's Process does no PATH lookup on a bare argv[0], so the launcher
-// is referenced by absolute path (same reason pranav.shopify hardcodes its
-// script path). Glyphs are Font Awesome codepoints drawn by the shared bar
-// font, which Qt falls back to the installed Nerd Font for.
+// The CLI location is resolved from PATH via a login shell (Quickshell's
+// Process does no PATH lookup on a bare argv[0], and installs differ: pipx,
+// `uv tool install`, and dev checkouts all land in different places).
+// Glyphs are Font Awesome codepoints drawn by the shared bar font, which Qt
+// falls back to the installed Nerd Font for.
 BarWidget {
   id: root
   moduleName: "pranav.keyclack"
 
-  readonly property string exe: "/home/pranav/.local/bin/keyclack"
+  property string exe: ""   // absolute path, resolved below
 
   property string status: "unknown"   // on | muted | off | unknown
   property string pack: ""            // current pack id, e.g. cherry-mx-red
@@ -42,10 +43,11 @@ BarWidget {
   }
 
   function refresh() {
-    if (!stateProc.running) stateProc.running = true
+    if (root.exe && !stateProc.running) stateProc.running = true
   }
 
   function run(cmd) {
+    if (!root.exe) return
     if (root.bar) root.bar.run(cmd)
     quickPoll.start()
   }
@@ -85,6 +87,29 @@ BarWidget {
 
   Timer { id: quickPoll; interval: 400; onTriggered: root.refresh() }
 
+  // Resolve the keyclack CLI once, retrying while it is missing so the
+  // widget recovers when the daemon is installed after the shell starts.
+  Process {
+    id: whichProc
+    command: ["bash", "-lc", "command -v keyclack"]
+    stdout: StdioCollector { id: whichOut; waitForEnd: true }
+    onExited: function(exitCode) {
+      var found = String(whichOut.text || "").trim().split("\n").pop()
+      if (exitCode === 0 && found) {
+        root.exe = found
+        root.refresh()
+      }
+    }
+  }
+
+  Timer {
+    id: whichRetry
+    interval: 5000
+    repeat: true
+    running: root.exe === ""
+    triggeredOnStart: true
+    onTriggered: if (!whichProc.running) whichProc.running = true
+  }
   Process {
     id: stateProc
     command: [root.exe, "state"]
@@ -124,6 +149,8 @@ BarWidget {
   }
 
   readonly property string tooltip: {
+    if (root.exe === "")
+      return "Keyclack CLI not found on PATH\ninstall it, then this widget picks it up"
     var packTxt = root.pack ? shortPack() : ""
     var stateTxt = root.on ? "Keyclack on" : root.muted ? "Keyclack muted"
         : root.off ? "Keyclack stopped" : "Keyclack…"

@@ -21,7 +21,8 @@ keyclack/                     Python package (the daemon + CLI)
   main.py                     CLI + daemon entry (argparse, signals, commands)
   packs/                      Bundled sample packs (MIT, from obsidian-click-clack)
   __init__.py, __main__.py
-omarchy/pranav.keyclack/      Optional Omarchy/Quickshell bar widget (separate component)
+manifest.json, BarWidget.qml,    Omarchy plugin (repo root IS the plugin for `omarchy plugin add`):
+Panel.qml                     bar widget + settings panel (separate concern from the daemon)
 bin/keyclack                  Legacy launcher (local dev convenience; console script is canonical)
 pyproject.toml                Packaging + `keyclack` console-script entry point
 LICENSE, THIRD_PARTY.md, README.md, CONTRIBUTING.md, CLAUDE.md
@@ -59,7 +60,7 @@ roles, or pack loading. It needs write access to `/dev/uinput`.
 
 3. **Quickshell `Process` does NO PATH lookup on a bare `argv[0]`** and does not expand
    `$HOME`. In any widget that shells out, use an absolute path to the binary (see
-   `omarchy/pranav.keyclack/BarWidget.qml` `exe`), and remember `bar.run()` goes through
+   `BarWidget.qml` `exe`), and remember `bar.run()` goes through
    `bash -lc` while `Process` does not — they behave differently.
 
 4. **`omarchy-shell shell rescanPlugins` reloads the plugin list but NOT edited widget code.**
