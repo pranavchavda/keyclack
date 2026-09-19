@@ -77,6 +77,24 @@ roles, or pack loading. It needs write access to `/dev/uinput`.
 7. **Only the key *press* (evdev value 1) is sounded**, not auto-repeat — by design, so
    holding a key doesn't machine-gun.
 
+8. **Keyboards hotplug; never assume the startup snapshot is complete.** Bluetooth boards
+   connect after the daemon starts and reconnect after every sleep. The daemon loop calls
+   `Capture.rescan()` every 2s to open new devices and close gone ones (see `capture.py`);
+   `tests/test_hotplug.py` guards this. Code that lists or opens `/dev/input` devices must
+   go through `Capture`, not enumerate once itself.
+
+9. **`keyclack set volume=…` / `pack` apply live.** `cmd_set` writes config then signals
+   the daemon with SIGUSR2 for hot-reloadable keys (volume, pack) — same contract as
+   `keyclack pack`. The Omarchy settings panel relies on this; never make the panel talk
+   to the daemon directly, always go through the CLI.
+
+10. **The bar widget MUST define `open()`/`close()`/`toggle()`.** `Ui.KeyboardPanel`'s
+    outside-click/Esc dismissal calls `owner.close()`; if the host `BarWidget` lacks it,
+    KeyboardPanel assigns its own `open` directly, permanently breaking the
+    `open: root.opened` binding — the icon toggles red but the panel never maps again
+    (bit us: "left click doesn't open the gui"). Debug live wiring with
+    `quickshell ipc -p /usr/share/omarchy/shell call pranav.keyclack diag`.
+
 ## Conventions
 
 - **Signals**: SIGUSR1 = mute/unmute toggle; SIGUSR2 = reload pack from config (hot swap,
