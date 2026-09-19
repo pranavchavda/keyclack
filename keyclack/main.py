@@ -14,6 +14,7 @@ Commands
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import signal
 import sys
@@ -134,12 +135,15 @@ def cmd_run(cfg: Config, verbose: bool = False) -> int:
                 new_pack = Pack(new_path, fresh.sample_rate)
             except Exception as exc:
                 print(f"\nkeyclack: pack reload failed: {exc}", file=sys.stderr)
-                return
+            old_caption = holder["pack"].caption
             holder["pack"] = new_pack
-            STATE.volume = fresh.volume
-            engine.volume = fresh.volume
+            if fresh.volume != STATE.volume:
+                STATE.volume = fresh.volume
+                engine.volume = fresh.volume
+                print(f"\nkeyclack: volume -> {fresh.volume}")
+            if new_pack.caption != old_caption:
+                print(f"\nkeyclack: pack -> '{new_pack.caption}'")
             _write_state()
-            print(f"\nkeyclack: pack -> '{new_pack.caption}'")
 
         signal.signal(signal.SIGINT, _term)
         signal.signal(signal.SIGTERM, _term)
@@ -147,12 +151,25 @@ def cmd_run(cfg: Config, verbose: bool = False) -> int:
         signal.signal(signal.SIGUSR2, _usr2)
 
         last_t = time.time()
+        last_scan = time.time()
         while not stop["flag"]:
             time.sleep(0.25)
-            if verbose and time.time() - last_t >= 2.0:
+            now = time.time()
+            # Hotplug: keyboards connect and reconnect after startup
+            # (Bluetooth boards pair late, sleep, wake). Reconcile the open
+            # device set every couple of seconds so they are picked up
+            # without a daemon restart.
+            if now - last_scan >= 2.0:
+                last_scan = now
+                added, removed = cap.rescan(cfg.devices)
+                for line in added:
+                    print(f"  listening: {line}", flush=True)
+                for line in removed:
+                    print(f"  released: {line}", flush=True)
+            if verbose and now - last_t >= 2.0:
                 peak = engine.peak_since()
                 print(f"  keys={STATE.keys} peak={peak:.3f}", flush=True)
-                last_t = time.time()
+                last_t = now
     finally:
         if cap:
             cap.stop()
@@ -233,13 +250,27 @@ def _resolve_pack(cfg: Config) -> Pack | None:
         return None
     return Pack(path, cfg.sample_rate)
 
-
-def cmd_packs(cfg: Config) -> int:
+def cmd_packs(cfg: Config, as_json: bool = False) -> int:
     avail = list_available_packs(cfg.pack_dir)
     if not avail:
-        print("no packs found (see pack_dir in the config, and `keyclack install-packs`)")
+        if as_json:
+            print("[]")
+        else:
+            print("no packs found (see pack_dir in the config, "
+                  "and `keyclack install-packs`)")
         return 0
     active = cfg.pack
+    if as_json:
+        rows = []
+        for n, path in avail.items():
+            cap = ""
+            try:
+                cap = Pack(path, cfg.sample_rate).caption
+            except Exception:
+                pass
+            rows.append({"id": n, "caption": cap, "active": n == active})
+        print(json.dumps(rows))
+        return 0
     for n, path in avail.items():
         mark = "  <-- active" if n == active else ""
         cap = ""
@@ -405,7 +436,7 @@ def cmd_state() -> int:
         return 1
     state = _read_state() or ("enabled" if STATE.enabled else "muted")
     cfg = Config.load()
-    print(f"running {state} pack={cfg.pack} (pid {pid})")
+    print(f"running {state} pack={cfg.pack} volume={cfg.volume} (pid {pid})")
     return 0
 
 
@@ -420,6 +451,7 @@ def cmd_status() -> int:
 
 
 def cmd_set(cfg: Config, pairs: list[str]) -> int:
+    hot = False  # keys the running daemon hot-reloads on SIGUSR2
     for pair in pairs:
         if "=" not in pair:
             print(f"expected key=value, got: {pair}")
@@ -429,8 +461,10 @@ def cmd_set(cfg: Config, pairs: list[str]) -> int:
         v = v.strip()
         if k == "volume":
             cfg.volume = float(v)
+            hot = True
         elif k == "pack":
             cfg.pack = v
+            hot = True
         elif k == "enabled":
             cfg.enabled = v.lower() in ("1", "true", "yes", "on")
         elif k in ("include_modifiers", "play_on_repeat"):
@@ -446,6 +480,9 @@ def cmd_set(cfg: Config, pairs: list[str]) -> int:
         print(f"  {k} = {v}")
     cfg.save()
     print(f"wrote {cfg._path}")
+    if hot and _daemon_pid() is not None:
+        os.kill(_daemon_pid(), signal.SIGUSR2)  # live reload, no restart
+        print("signalled running daemon")
     return 0
 
 
@@ -465,7 +502,9 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--device", default=None)
 
     sub.add_parser("list", help="list detected keyboards")
-    sub.add_parser("packs", help="list installed sound packs")
+    pl = sub.add_parser("packs", help="list installed sound packs")
+    pl.add_argument("--json", action="store_true",
+                    help="machine-readable list for scripts/widgets")
     sub.add_parser("install-packs",
                    help="copy bundled packs into your pack dir")
     sub.add_parser("soundcheck", help="play each sample of the active pack")
@@ -488,7 +527,7 @@ def main(argv=None) -> int:
     if args.command == "list":
         return cmd_list()
     if args.command == "packs":
-        return cmd_packs(cfg)
+        return cmd_packs(cfg, as_json=args.json)
     if args.command == "install-packs":
         return cmd_install_packs(cfg)
     if args.command == "soundcheck":

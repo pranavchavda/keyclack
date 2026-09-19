@@ -53,6 +53,10 @@ class Capture:
     On every key *press* the configured handler is called with
     ``handler(code:int, value:int, name:str)`` where value is the evdev state
     (1 = press).  Returns nothing.
+
+    Keyboards come and go after the daemon starts: Bluetooth boards connect
+    late, sleep, and reconnect on a different node. Call ``rescan()``
+    periodically to open devices that appeared and close ones that went away.
     """
 
     def __init__(self, handler, play_on_repeat: bool = False,
@@ -60,8 +64,7 @@ class Capture:
         self.handler = handler
         self.play_on_repeat = play_on_repeat
         self.include_synthetic = include_synthetic
-        self._devices: list[InputDevice] = []
-        self._threads: list[threading.Thread] = []
+        self._live: dict[str, tuple[InputDevice, threading.Thread]] = {}
         self._stop = threading.Event()
         self.opened: list[str] = []
 
@@ -83,25 +86,69 @@ class Capture:
 
     def start(self, config_devices) -> int:
         """Open chosen devices and start a reader thread per device."""
-        chosen = self._select(config_devices)
-        for path, name, phys in chosen:
-            try:
-                dev = InputDevice(path)
-            except (OSError, PermissionError) as exc:
-                print(f"keyclack: cannot open {path} ({name}): {exc}")
+        self._stop.clear()
+        for path, name, phys in self._select(config_devices):
+            self._open(path, name)
+        return len(self._live)
+
+    def _open(self, path: str, name: str) -> bool:
+        """Open one device and spawn its reader thread."""
+        try:
+            dev = InputDevice(path)
+        except (OSError, PermissionError) as exc:
+            print(f"keyclack: cannot open {path} ({name}): {exc}")
+            return False
+        try:
+            dev.grab()  # not needed for passive read, and would block others
+        except Exception:
+            pass
+        dev.ungrab()
+        t = threading.Thread(target=self._read_loop, args=(dev,),
+                             name=f"kbd-{path}", daemon=True)
+        self._live[path] = (dev, t)
+        self.opened.append(f"{name}  [{path}]")
+        t.start()
+        return True
+
+    def _close(self, path: str) -> None:
+        """Drop one device. Its reader thread exits on its own: select()
+        times out within 0.3s, then read() on the closed fd fails."""
+        dev = self._live.pop(path)[0]
+        line = f"{dev.name}  [{path}]"
+        if line in self.opened:
+            self.opened.remove(line)
+        try:
+            dev.close()
+        except Exception:
+            pass
+
+    def rescan(self, config_devices) -> tuple[list[str], list[str]]:
+        """Reconcile open devices with the keyboards plugged in right now.
+
+        Opens devices that appeared, plus nodes whose reader thread died and
+        whose path came back (a Bluetooth board reconnecting on the same
+        node); closes devices that are gone. Returns ``(added, removed)``
+        display lines. Safe to call while reader threads run.
+        """
+        if self._stop.is_set():
+            return [], []
+        want = {path: name for path, name, phys in self._select(config_devices)}
+        added: list[str] = []
+        for path, name in want.items():
+            entry = self._live.get(path)
+            if entry is not None and entry[1].is_alive():
                 continue
-            try:
-                dev.grab()  # not needed for passive read, and would block others
-            except Exception:
-                pass
-            dev.ungrab()
-            self._devices.append(dev)
-            self.opened.append(f"{name}  [{path}]")
-            t = threading.Thread(target=self._read_loop, args=(dev,),
-                                 name=f"kbd-{path}", daemon=True)
-            self._threads.append(t)
-            t.start()
-        return len(self._threads)
+            if entry is not None:
+                self._close(path)
+            if self._open(path, name):
+                added.append(f"{name}  [{path}]")
+        removed: list[str] = []
+        for path in list(self._live):
+            if path not in want:
+                dev = self._live[path][0]
+                removed.append(f"{dev.name}  [{path}]")
+                self._close(path)
+        return added, removed
 
     def _read_loop(self, dev: InputDevice) -> None:
         while not self._stop.is_set():
@@ -123,9 +170,6 @@ class Capture:
 
     def stop(self) -> None:
         self._stop.set()
-        for dev in self._devices:
-            try:
-                dev.close()
-            except Exception:
-                pass
-        self._devices = []
+        for path in list(self._live):
+            self._close(path)
+        self.opened = []
