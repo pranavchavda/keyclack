@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "author": "Pranav Chavda",
   "license": "MIT",
-  "description": "Mute/unmute keyclack keyboard-sound daemon from the bar",
+  "description": "Keyclack keyboard sounds from the bar: settings panel (volume, sound pack), quick mute, pack cycling",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Keyclack",
-    "description": "Toggle keyclack's mechanical keyboard sounds (click to mute/unmute; starts the daemon if it is stopped).",
+    "description": "Left-click opens settings (volume, sound pack); right-click mutes; middle-click cycles packs; starts the daemon if stopped.",
     "category": "Sound",
     "allowMultiple": false,
     "defaultSection": "right"
